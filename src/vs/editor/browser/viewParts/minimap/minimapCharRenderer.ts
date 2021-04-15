@@ -35,10 +35,11 @@ export class MinimapCharRenderer {
 		backgroundColor: RGBA8,
 		fontScale: number,
 		useLighterFont: boolean,
-		force1pxHeight: boolean
+		force1pxHeight: boolean,
+		isMarker: boolean = false
 	): void {
-		const charWidth = Constants.BASE_CHAR_WIDTH * this.scale;
-		const charHeight = Constants.BASE_CHAR_HEIGHT * this.scale;
+		const charWidth = Constants.BASE_CHAR_WIDTH * this.scale * (isMarker ? 2 : 1);
+		const charHeight = Constants.BASE_CHAR_HEIGHT * this.scale * (isMarker ? 2 : 1);
 		const renderHeight = (force1pxHeight ? 1 : charHeight);
 		if (dx + charWidth > target.width || dy + renderHeight > target.height) {
 			console.warn('bad render request outside image data');

@@ -98,6 +98,7 @@ class MinimapOptions {
 	public readonly minimapCharWidth: number;
 
 	public readonly charRenderer: () => MinimapCharRenderer;
+	public readonly doubleCharRenderer: () => MinimapCharRenderer;
 	public readonly backgroundColor: RGBA8;
 
 	constructor(configuration: IConfiguration, theme: EditorTheme, tokensColorTracker: MinimapTokensColorTracker) {
@@ -132,6 +133,7 @@ class MinimapOptions {
 		this.minimapCharWidth = Constants.BASE_CHAR_WIDTH * this.fontScale;
 
 		this.charRenderer = once(() => MinimapCharRendererFactory.create(this.fontScale, fontInfo.fontFamily));
+		this.doubleCharRenderer = once(() => MinimapCharRendererFactory.create(this.fontScale * 2, fontInfo.fontFamily));
 		this.backgroundColor = MinimapOptions._getMinimapBackground(theme, tokensColorTracker);
 	}
 
@@ -1526,6 +1528,7 @@ class InnerMinimap extends Disposable {
 		const useLighterFont = tokensColorTracker.backgroundIsLight();
 		const renderMinimap = this._model.options.renderMinimap;
 		const charRenderer = this._model.options.charRenderer();
+		const doubleCharRenderer = this._model.options.doubleCharRenderer();
 		const fontScale = this._model.options.fontScale;
 		const minimapCharWidth = this._model.options.minimapCharWidth;
 
@@ -1537,25 +1540,28 @@ class InnerMinimap extends Disposable {
 		let dy = 0;
 		const renderedLines: MinimapLine[] = [];
 		for (let lineIndex = 0, lineCount = endLineNumber - startLineNumber + 1; lineIndex < lineCount; lineIndex++) {
+			const isMark = lineInfo[lineIndex]?.content.match(/(#|\/\/) (MARK:|---)/) ? true : false;
+
 			if (needed[lineIndex]) {
 				InnerMinimap._renderLine(
 					imageData,
 					background,
 					useLighterFont,
 					renderMinimap,
-					minimapCharWidth,
+					minimapCharWidth * (isMark ? 2 : 1),
 					tokensColorTracker,
 					charRenderer,
+					doubleCharRenderer,
 					dy,
 					innerLinePadding,
 					tabSize,
 					lineInfo[lineIndex]!,
 					fontScale,
-					minimapLineHeight
+					minimapLineHeight * (isMark ? 2 : 1)
 				);
 			}
 			renderedLines[lineIndex] = new MinimapLine(dy);
-			dy += minimapLineHeight;
+			dy += minimapLineHeight;// * (isMark ? 2 : 1);
 		}
 
 		const dirtyY1 = (_dirtyY1 === -1 ? 0 : _dirtyY1);
@@ -1674,6 +1680,7 @@ class InnerMinimap extends Disposable {
 		charWidth: number,
 		colorTracker: MinimapTokensColorTracker,
 		minimapCharRenderer: MinimapCharRenderer,
+		doubleMinimapCharRenderer: MinimapCharRenderer,
 		dy: number,
 		innerLinePadding: number,
 		tabSize: number,
@@ -1690,10 +1697,17 @@ class InnerMinimap extends Disposable {
 		let charIndex = 0;
 		let tabsCharDelta = 0;
 
+		// Detect a "mark" comment
+		let isLineMark = false;
+		if (content.match(/(#|\/\/) (MARK:|---)/)) {
+			isLineMark = true;
+			minimapLineHeight *= 2;
+		}
+
 		for (let tokenIndex = 0, tokensLen = tokens.getCount(); tokenIndex < tokensLen; tokenIndex++) {
 			const tokenEndIndex = tokens.getEndOffset(tokenIndex);
 			const tokenColorId = tokens.getForeground(tokenIndex);
-			const tokenColor = colorTracker.getColor(tokenColorId);
+			const tokenColor = /*isLineMark ? markColour : /**/colorTracker.getColor(tokenColorId);
 
 			for (; charIndex < tokenEndIndex; charIndex++) {
 				if (dx > maxDx) {
@@ -1713,9 +1727,14 @@ class InnerMinimap extends Disposable {
 				} else {
 					// Render twice for a full width character
 					const count = strings.isFullWidthCharacter(charCode) ? 2 : 1;
+					// if (isLineMark) {
+					// 	count *= 2;
+					// }
 
 					for (let i = 0; i < count; i++) {
-						if (renderMinimap === RenderMinimap.Blocks) {
+						if (isLineMark) {
+							doubleMinimapCharRenderer.renderChar(target, dx, dy + innerLinePadding, charCode, tokenColor, backgroundColor, fontScale, useLighterFont, force1pxHeight, false);
+						} else if (renderMinimap === RenderMinimap.Blocks) {
 							minimapCharRenderer.blockRenderChar(target, dx, dy + innerLinePadding, tokenColor, backgroundColor, useLighterFont, force1pxHeight);
 						} else { // RenderMinimap.Text
 							minimapCharRenderer.renderChar(target, dx, dy + innerLinePadding, charCode, tokenColor, backgroundColor, fontScale, useLighterFont, force1pxHeight);
